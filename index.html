@@ -1,66 +1,79 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1.0">
   <title>Feeding Log</title>
   <style>
-    * { box-sizing:border-box; margin:0; padding:0; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
-      font:1rem/1.4 sans-serif;
-      padding:1rem;
-      background:#fff; color:#111;
-      display:flex; flex-direction:column; height:100vh;
+      font-family: sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 1rem;
+      background: #fff;
+      color: #111;
+      height: 100vh;
     }
     #buttons {
-      display:grid;
-      grid-template-columns:1fr 1fr 1fr;
-      gap:0.5rem;
-      margin-bottom:0.5rem;
+      display: flex;
+      justify-content: center;
+      gap: 1rem;
+      width: 100%;
+      max-width: 800px;
+      margin-bottom: 1rem;
     }
-    button {
-      padding:1rem;
-      font-size:1.1rem;
-      background:#111; color:#fff;
-      border:none; border-radius:4px;
-      touch-action:manipulation;
+    #buttons button {
+      flex: 1;
+      max-width: 150px;
+      padding: 1.5rem;
+      font-size: 1.5rem;
+      background: #111;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      touch-action: manipulation;
     }
-    #completeBtn {
-      display:none;
-      background:#007aff;
-    }
+    #completeBtn { background: #007aff; display: none; }
     #sideTimers {
-      display:grid;
-      grid-template-columns:1fr 1fr;
-      gap:0.5rem;
-      margin-bottom:1rem;
+      display: flex;
+      justify-content: center;
+      gap: 1rem;
+      margin-bottom: 1rem;
+      width: 100%;
+      max-width: 800px;
     }
     .side-timer {
-      text-align:center;
-      font-size:0.9rem;
-      color:#555;
+      flex: 1;
+      text-align: center;
+      font-size: 1rem;
+      color: #555;
     }
     #next {
-      margin-bottom:1rem;
-      font-weight:500;
+      margin-bottom: 1rem;
+      font-weight: 500;
     }
     #log {
-      overflow:auto;
-      flex:1;
+      flex: 1;
+      width: 100%;
+      max-width: 800px;
+      overflow: auto;
     }
     .day {
-      margin-top:1rem;
-      font-weight:600;
+      margin-top: 1rem;
+      font-weight: 600;
     }
     .card {
-      border:1px solid #ddd;
-      border-radius:4px;
-      padding:0.5rem;
-      margin-top:0.5rem;
-      display:flex; justify-content:space-between;
-      background:#f9f9f9;
+      display: flex;
+      justify-content: space-between;
+      padding: 0.5rem;
+      margin-top: 0.5rem;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      background: #f9f9f9;
     }
-    .incomplete { background:#ffe; }
+    .incomplete { background: #ffe; }
   </style>
 </head>
 <body>
@@ -77,9 +90,9 @@
   <div id="log"></div>
 
   <script>
-    const STORAGE_EVENTS  = 'bfEvents';
+    const STORAGE_EVENTS = 'bfEvents';
     const STORAGE_CURRENT = 'bfCurrent';
-    const INTERVAL_MS     = 3 * 60 * 60 * 1000;
+    const INTERVAL_MS = 3 * 60 * 60 * 1000;
 
     let events = JSON.parse(localStorage.getItem(STORAGE_EVENTS) || '[]');
     let current = JSON.parse(localStorage.getItem(STORAGE_CURRENT) || '{}');
@@ -105,7 +118,7 @@
     function fmtElapsed(ms) {
       const m = String(Math.floor(ms / 60000)).padStart(2, '0');
       const s = String(Math.floor((ms % 60000) / 1000)).padStart(2, '0');
-      return m + ':' + s;
+      return `${m}:${s}`;
     }
 
     function logSide(side) {
@@ -144,12 +157,11 @@
 
       const logEl = document.getElementById('log');
       logEl.innerHTML = '';
-      let lastDay = null;
+      let lastDay = '';
 
-      // Build display list: completed feeds + in-progress
-      const list = events.map(f => Object.assign({complete: true}, f));
+      const list = events.map(f => ({ ...f, complete: true }));
       if (current.left || current.right) {
-        list.push(Object.assign({complete: false}, current));
+        list.push({ ...current, complete: false });
       }
 
       list.reverse().forEach(feed => {
@@ -164,23 +176,23 @@
         }
         const card = document.createElement('div');
         card.className = 'card' + (feed.complete ? '' : ' incomplete');
+
         const leftTime = feed.left ? fmtTime(feed.left) : '–';
         let rightDisplay = '–';
         if (feed.complete) {
-          const duration = Math.round((feed.right - feed.left) / 60000);
-          rightDisplay = 'Complete ✅ (' + duration + ' min)';
+          const dur = Math.round((feed.right - feed.left) / 60000);
+          rightDisplay = `Complete ✅ (${dur} min)`;
         } else if (feed.right) {
           rightDisplay = fmtTime(feed.right);
         }
-        card.innerHTML = '<div>' + leftTime + '</div><div>' + rightDisplay + '</div>';
+
+        card.innerHTML = `<div>${leftTime}</div><div>${rightDisplay}</div>`;
         logEl.appendChild(card);
       });
 
-      // Complete button
       document.getElementById('completeBtn').style.display =
         (current.left && current.right) ? 'block' : 'none';
 
-      // Next feed
       const nextEl = document.getElementById('next');
       if (events.length) {
         const last = events[events.length - 1];
@@ -191,10 +203,10 @@
       }
     }
 
-    // Event listeners
-    document.querySelectorAll('button[data-side]').forEach(btn => {
-      btn.addEventListener('click', () => logSide(btn.dataset.side));
-    });
+    document.querySelector('button[data-side="left"]')
+      .addEventListener('click', () => logSide('left'));
+    document.querySelector('button[data-side="right"]')
+      .addEventListener('click', () => logSide('right'));
     document.getElementById('completeBtn')
       .addEventListener('click', completeFeed);
 
