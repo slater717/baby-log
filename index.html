@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <title>Feeding Log</title>
+  <style>
+    * {box-sizing:border-box; margin:0; padding:0;}
+    body {
+      font:1rem/1.4 sans-serif;
+      padding:1rem;
+      background:#fff; color:#111;
+      display:flex; flex-direction:column; height:100vh;
+    }
+    #buttons {
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:0.5rem;
+      margin-bottom:1rem;
+    }
+    button {
+      padding:1rem;
+      font-size:1.1rem;
+      background:#111; color:#fff;
+      border:none; border-radius:4px;
+      touch-action:manipulation;
+    }
+    #next {
+      margin-bottom:1rem;
+      font-weight:500;
+    }
+    #log {
+      overflow:auto;
+      flex:1;
+    }
+    .day {
+      margin-top:1rem;
+      font-weight:600;
+    }
+    .card {
+      border:1px solid #ddd;
+      border-radius:4px;
+      padding:0.5rem;
+      margin-top:0.5rem;
+      display:flex; justify-content:space-between;
+      background:#f9f9f9;
+    }
+    .incomplete {background:#ffe;}
+  </style>
+</head>
+<body>
+  <div id="buttons">
+    <button data-side="left">Left</button>
+    <button data-side="right">Right</button>
+  </div>
+  <div id="next"></div>
+  <div id="log"></div>
+
+  <script>
+    const KEY = 'bfEvents',
+          INTERVAL = 3*60*60*1000;
+    let events = JSON.parse(localStorage.getItem(KEY) || '[]');
+
+    function save(){
+      localStorage.setItem(KEY, JSON.stringify(events));
+    }
+
+    function fmtDate(ts){
+      return new Date(ts).toLocaleDateString(undefined, {
+        month:'short', day:'numeric', year:'numeric'
+      });
+    }
+    function fmtTime(ts){
+      return new Date(ts).toLocaleTimeString(undefined, {
+        hour:'2-digit', minute:'2-digit'
+      });
+    }
+
+    function logSide(side){
+      const now = Date.now(),
+            last = events[events.length-1];
+      if(!last || (last.left && last.right) || last[side]){
+        events.push({ [side]: now });
+      } else {
+        last[side] = now;
+      }
+      save();
+      render();
+    }
+
+    function render(){
+      const logEl = document.getElementById('log'),
+            nextEl = document.getElementById('next');
+      logEl.innerHTML = '';
+      let lastDay = '';
+
+      events.slice().reverse().forEach(e => {
+        const day = fmtDate(e.left || e.right);
+        if(day !== lastDay){
+          lastDay = day;
+          const h = document.createElement('div');
+          h.textContent = day;
+          h.className = 'day';
+          logEl.appendChild(h);
+        }
+        const card = document.createElement('div'),
+              complete = e.left && e.right;
+        card.className = 'card' + (complete ? '' : ' incomplete');
+
+        const leftHtml = e.left ? fmtTime(e.left) : '–';
+        let rightHtml = '–';
+        if(complete){
+          const mins = Math.round((e.right - e.left) / 60000);
+          rightHtml = `Complete ✅ (${mins} min)`;
+        } else if(e.right){
+          rightHtml = fmtTime(e.right);
+        }
+
+        card.innerHTML = `<div>${leftHtml}</div><div>${rightHtml}</div>`;
+        logEl.appendChild(card);
+      });
+
+      const last = events[events.length-1];
+      if(last && last.left && last.right){
+        const t = Math.max(last.left, last.right) + INTERVAL;
+        nextEl.textContent = 'Next feed at ' +
+          new Date(t).toLocaleTimeString(undefined, {
+            hour:'2-digit', minute:'2-digit'
+          });
+      } else if(last){
+        nextEl.textContent = last.left
+          ? 'Finish right side'
+          : 'Finish left side';
+      } else {
+        nextEl.textContent = '';
+      }
+    }
+
+    document.querySelectorAll('button')
+      .forEach(b => b.addEventListener('click', () => logSide(b.dataset.side)));
+
+    render();
+  </script>
+</body>
+</html>
