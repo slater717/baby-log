@@ -5,44 +5,67 @@
   <meta name="viewport" content="width=device-width,initial-scale=1.0">
   <title>Feeding Log</title>
   <style>
-    * {box-sizing:border-box; margin:0; padding:0;}
+    * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
       font-family: sans-serif;
-      display:flex; flex-direction:column; align-items:center;
-      padding:1rem; background:#fff; color:#111;
-      height:100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 1rem;
+      background: #fff;
+      color: #111;
+      height: 100vh;
     }
     #buttons {
-      display:flex; justify-content:center; gap:1rem;
-      margin-bottom:1rem;
+      display: flex;
+      justify-content: center;
+      gap: 1rem;
+      margin-bottom: 1rem;
+      width: 100%;
+      max-width: 800px;
     }
     #buttons button {
-      padding:1.5rem 2rem;
-      font-size:1.5rem;
-      background:#111; color:#fff;
-      border:none; border-radius:8px;
-      touch-action:manipulation;
+      flex: 1;
+      max-width: 150px;
+      padding: 1.5rem 2rem;
+      font-size: 1.5rem;
+      background: #111;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      touch-action: manipulation;
     }
-    #completeBtn {background:#007aff; display:none;}
+    #completeBtn { background: #007aff; display: none; }
     #sideTimers {
-      display:flex; justify-content:center; gap:2rem;
-      margin-bottom:1rem;
+      display: flex;
+      justify-content: center;
+      gap: 2rem;
+      margin-bottom: 1rem;
     }
     .side-timer {
-      font-size:1.2rem; color:#555; min-width:3rem; text-align:center;
+      font-size: 1.2rem;
+      color: #555;
+      min-width: 3rem;
+      text-align: center;
     }
-    #next {margin-bottom:1rem; font-weight:500;}
+    #next { margin-bottom: 1rem; font-weight: 500; }
     #log {
-      flex:1; width:100%; max-width:600px; overflow:auto;
+      flex: 1;
+      width: 100%;
+      max-width: 600px;
+      overflow: auto;
     }
-    .day {margin-top:1rem; font-weight:600;}
+    .day { margin-top: 1rem; font-weight: 600; }
     .card {
-      display:flex; justify-content:space-between;
-      padding:0.5rem; margin-top:0.5rem;
-      border:1px solid #ddd; border-radius:4px;
-      background:#f9f9f9;
+      display: flex;
+      justify-content: space-between;
+      padding: 0.5rem;
+      margin-top: 0.5rem;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      background: #f9f9f9;
     }
-    .incomplete {background:#ffe;}
+    .incomplete { background: #ffe; }
   </style>
 </head>
 <body>
@@ -52,104 +75,128 @@
     <button id="completeBtn">Complete</button>
   </div>
   <div id="sideTimers">
-    <div id="timer-left" class="side-timer">00:00</div>
-    <div id="timer-right" class="side-timer">00:00</div>
+    <div id="timer-left" class="side-timer"></div>
+    <div id="timer-right" class="side-timer"></div>
   </div>
   <div id="next"></div>
   <div id="log"></div>
-<script>
-  const EVENTS_KEY = 'bfEvents', CURRENT_KEY = 'bfCurrent', INTERVAL = 3*60*60*1000;
-  let events = JSON.parse(localStorage.getItem(EVENTS_KEY)||'[]');
-  let current = JSON.parse(localStorage.getItem(CURRENT_KEY)||'{}');
-  let intervalId;
+  <script>
+    const EVENTS_KEY = 'bfEvents';
+    const CURRENT_KEY = 'bfCurrent';
+    const INTERVAL_MS = 3 * 60 * 60 * 1000;
+    let events = JSON.parse(localStorage.getItem(EVENTS_KEY) || '[]');
+    let current = JSON.parse(localStorage.getItem(CURRENT_KEY) || '{}');
+    let timerInterval;
 
-  function save() {
-    localStorage.setItem(EVENTS_KEY, JSON.stringify(events));
-    localStorage.setItem(CURRENT_KEY, JSON.stringify(current));
-  }
-
-  function fmtTime(ts) {
-    return new Date(ts).toLocaleTimeString(undefined,{hour:'2-digit',minute:'2-digit'});
-  }
-  function fmtElapsed(since) {
-    const ms=Date.now()-since, m=String(Math.floor(ms/60000)).padStart(2,'0'), s=String(Math.floor(ms%60000/1000)).padStart(2,'0');
-    return \`\${m}:\${s}\`;
-  }
-
-  function logSide(side){
-    const now=Date.now();
-    // if opposite side active, finish it
-    const other = side==='left'?'right':'left';
-    if(current[other+'Start']){
-      current[other+'Dur']=now-current[other+'Start'];
-      delete current[other+'Start'];
+    function saveState() {
+      localStorage.setItem(EVENTS_KEY, JSON.stringify(events));
+      localStorage.setItem(CURRENT_KEY, JSON.stringify(current));
     }
-    // start this side if not already started
-    if(!current[side+'Start']){
-      current[side+'Start']=now;
-    }
-    save();
-    render();
-  }
 
-  function completeFeed(){
-    if(current.leftDur!=null && current.rightDur!=null){
-      const done=Date.now(), total=Math.round((current.leftDur+current.rightDur)/60000);
-      events.push({leftStart:current.leftStart, total, end:done});
-      current={};
-      save();
-      render();
+    function fmtTime(ts) {
+      return new Date(ts).toLocaleTimeString(undefined,{
+        hour: '2-digit', minute: '2-digit'
+      });
     }
-  }
+    function fmtElapsed(start) {
+      const ms = Date.now() - start;
+      const m = String(Math.floor(ms/60000)).padStart(2,'0');
+      const s = String(Math.floor((ms%60000)/1000)).padStart(2,'0');
+      return `${m}:${s}`;
+    }
 
-  function updateTimers(){
-    ['left','right'].forEach(side=>{
-      const el=document.getElementById('timer-'+side);
-      if(current[side+'Start']){
-        el.textContent=fmtElapsed(current[side+'Start']);
-      } else if(current[side+'Dur']!=null){
-        const mm=String(Math.round(current[side+'Dur']/60000)).padStart(2,'0');
-        el.textContent=\`\${mm}:00\`;
-      } else {
-        el.textContent='00:00';
+    function logSide(side) {
+      if (!current[side]) {
+        current[side] = Date.now();
+        saveState();
+        render();
       }
-    });
-  }
-
-  function render(){
-    clearInterval(intervalId);
-    updateTimers();
-    intervalId=setInterval(updateTimers,1000);
-
-    const logEl=document.getElementById('log'); logEl.innerHTML=''; let lastDay='';
-    const list=events.map(e=>({...e,complete:true}));
-    if(current.leftStart||current.rightStart||current.leftDur!=null||current.rightDur!=null){
-      list.push({...current,complete:false});
     }
-    list.reverse().forEach(e=>{
-      const ts=e.leftStart||e.end, day=new Date(ts).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'});
-      if(day!==lastDay){ lastDay=day; let h=document.createElement('div');h.textContent=day;h.className='day';logEl.appendChild(h);}
-      let card=document.createElement('div'); card.className='card'+(e.complete?'':' incomplete');
-      let left= e.leftStart?fmtTime(e.leftStart):'–';
-      let right=e.complete? \`Complete ✅ (\${e.total} min)\`:
-        (e.rightStart?fmtTime(e.rightStart): (e.rightDur!=null?String(Math.round(e.rightDur/60000)).padStart(2,'0')+':00':'–'));
-      card.innerHTML=\`<div>\${left}</div><div>\${right}</div>\`;
-      logEl.appendChild(card);
+
+    function completeFeed() {
+      if (current.left && current.right) {
+        const now = Date.now();
+        const duration = Math.round(((current.right - current.left) + 0)/60000);
+        events.push({ left: current.left, right: current.right, t: now });
+        current = {};
+        saveState();
+        render();
+      }
+    }
+
+    function updateTimers() {
+      ['left','right'].forEach(side => {
+        const el = document.getElementById('timer-' + side);
+        if (current[side]) {
+          el.textContent = fmtElapsed(current[side]);
+        } else {
+          el.textContent = '';
+        }
+      });
+    }
+
+    function render() {
+      clearInterval(timerInterval);
+      updateTimers();
+      timerInterval = setInterval(updateTimers, 1000);
+
+      const logEl = document.getElementById('log');
+      logEl.innerHTML = '';
+      let lastDay = '';
+
+      const list = events.map(e => ({ ...e, complete: true }));
+      if (current.left || current.right) {
+        list.push({ ...current, complete: false });
+      }
+
+      list.slice().reverse().forEach(feed => {
+        const ts = feed.left || feed.right;
+        const dayStr = new Date(ts).toLocaleDateString(undefined,{
+          month: 'short', day: 'numeric', year: 'numeric'
+        });
+        if (dayStr !== lastDay) {
+          lastDay = dayStr;
+          const hdr = document.createElement('div');
+          hdr.className = 'day';
+          hdr.textContent = dayStr;
+          logEl.appendChild(hdr);
+        }
+        const card = document.createElement('div');
+        card.className = 'card' + (feed.complete ? '' : ' incomplete');
+        const leftLabel = feed.left ? fmtTime(feed.left) : '–';
+        let rightLabel = '–';
+        if (feed.complete) {
+          const mins = Math.round((feed.right - feed.left)/60000);
+          rightLabel = `Complete ✅ (${mins} min)`;
+        } else if (feed.right) {
+          rightLabel = fmtTime(feed.right);
+        }
+        card.innerHTML = `<div>${leftLabel}</div><div>${rightLabel}</div>`;
+        logEl.appendChild(card);
+      });
+
+      document.getElementById('completeBtn').style.display =
+        (current.left && current.right) ? 'block' : 'none';
+
+      const nextEl = document.getElementById('next');
+      if (events.length) {
+        const last = events[events.length - 1];
+        const nextTime = new Date(last.t + INTERVAL_MS);
+        nextEl.textContent = 'Next feed at ' + nextTime.toLocaleTimeString(undefined,{
+          hour: '2-digit', minute: '2-digit'
+        });
+      } else {
+        nextEl.textContent = '';
+      }
+    }
+
+    document.querySelectorAll('button[data-side]').forEach(btn => {
+      btn.addEventListener('click', () => logSide(btn.dataset.side));
     });
+    document.getElementById('completeBtn')
+      .addEventListener('click', completeFeed);
 
-    document.getElementById('completeBtn').style.display=(current.leftDur!=null&&current.rightDur!=null)?'block':'none';
-    const nextEl=document.getElementById('next');
-    if(events.length){
-      const last=events[events.length-1], due=new Date(last.end+INTERVAL);
-      nextEl.textContent='Next feed at '+due.toLocaleTimeString(undefined,{hour:'2-digit',minute:'2-digit'});
-    } else nextEl.textContent='';
-  }
-
-  document.querySelector('button[data-side="left"]').addEventListener('click',()=>logSide('left'));
-  document.querySelector('button[data-side="right"]').addEventListener('click',()=>logSide('right'));
-  document.getElementById('completeBtn').addEventListener('click',completeFeed);
-
-  render();
-</script>
+    render();
+  </script>
 </body>
 </html>
