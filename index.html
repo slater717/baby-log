@@ -14,9 +14,9 @@
     }
     #buttons {
       display:grid;
-      grid-template-columns:1fr 1fr;
+      grid-template-columns:1fr 1fr 1fr;
       gap:0.5rem;
-      margin-bottom:1rem;
+      margin-bottom:0.5rem;
     }
     button {
       padding:1rem;
@@ -24,6 +24,18 @@
       background:#111; color:#fff;
       border:none; border-radius:4px;
       touch-action:manipulation;
+    }
+    #completeBtn { display:none; background:#007aff; }
+    #sideTimers {
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:0.5rem;
+      margin-bottom:1rem;
+    }
+    .side-timer {
+      text-align:center;
+      font-size:0.9rem;
+      color:#555;
     }
     #next {
       margin-bottom:1rem;
@@ -45,99 +57,133 @@
       display:flex; justify-content:space-between;
       background:#f9f9f9;
     }
-    .incomplete {background:#ffe;}
+    .incomplete { background:#ffe; }
   </style>
 </head>
 <body>
   <div id="buttons">
     <button data-side="left">Left</button>
     <button data-side="right">Right</button>
+    <button id="completeBtn">Complete</button>
+  </div>
+  <div id="sideTimers">
+    <div id="timer-left" class="side-timer"></div>
+    <div id="timer-right" class="side-timer"></div>
   </div>
   <div id="next"></div>
   <div id="log"></div>
 
   <script>
-    const KEY = 'bfEvents',
-          INTERVAL = 3*60*60*1000;
-    let events = JSON.parse(localStorage.getItem(KEY) || '[]');
+    const KEY_EVENTS  = 'bfEvents',
+          KEY_CURRENT = 'bfCurrent',
+          INTERVAL    = 3 * 60 * 60 * 1000;
 
-    function save(){
-      localStorage.setItem(KEY, JSON.stringify(events));
+    let events       = JSON.parse(localStorage.getItem(KEY_EVENTS)  || '[]'),
+        currentEvent = JSON.parse(localStorage.getItem(KEY_CURRENT) || '{}'),
+        timerId;
+
+    function saveEvents()  { localStorage.setItem(KEY_EVENTS,  JSON.stringify(events)); }
+    function saveCurrent() { localStorage.setItem(KEY_CURRENT, JSON.stringify(currentEvent)); }
+
+    function fmtDate(ts) {
+      return new Date(ts).toLocaleDateString(undefined, {month:'short',day:'numeric',year:'numeric'});
+    }
+    function fmtTime(ts) {
+      return new Date(ts).toLocaleTimeString(undefined, {hour:'2-digit',minute:'2-digit'});
+    }
+    function fmtElapsed(ms) {
+      const m = String(Math.floor(ms/60000)).padStart(2,'0');
+      const s = String(Math.floor(ms%60000/1000)).padStart(2,'0');
+      return `${m}:${s}`;
     }
 
-    function fmtDate(ts){
-      return new Date(ts).toLocaleDateString(undefined, {
-        month:'short', day:'numeric', year:'numeric'
-      });
-    }
-    function fmtTime(ts){
-      return new Date(ts).toLocaleTimeString(undefined, {
-        hour:'2-digit', minute:'2-digit'
-      });
-    }
-
-    function logSide(side){
-      const now = Date.now(),
-            last = events[events.length-1];
-      if(!last || (last.left && last.right) || last[side]){
-        events.push({ [side]: now });
-      } else {
-        last[side] = now;
+    function logSide(side) {
+      const now = Date.now();
+      if (!currentEvent[side]) {
+        currentEvent[side] = now;
       }
-      save();
+      saveCurrent();
       render();
     }
 
-    function render(){
-      const logEl = document.getElementById('log'),
-            nextEl = document.getElementById('next');
+    function completeEvent() {
+      if (currentEvent.left && currentEvent.right) {
+        events.push({ left: currentEvent.left, right: currentEvent.right });
+        saveEvents();
+        currentEvent = {};
+        saveCurrent();
+        render();
+      }
+    }
+
+    function updateTimers() {
+      const now = Date.now();
+      ['left','right'].forEach(side => {
+        const el = document.getElementById('timer-'+side);
+        if (currentEvent[side] && !(currentEvent.left && currentEvent.right)) {
+          el.textContent = fmtElapsed(now - currentEvent[side]);
+        } else {
+          el.textContent = '';
+        }
+      });
+    }
+
+    function render() {
+      clearInterval(timerId);
+      updateTimers();
+      timerId = setInterval(updateTimers, 1000);
+
+      const logEl    = document.getElementById('log'),
+            nextEl   = document.getElementById('next'),
+            btnComp  = document.getElementById('completeBtn');
       logEl.innerHTML = '';
       let lastDay = '';
 
-      events.slice().reverse().forEach(e => {
-        const day = fmtDate(e.left || e.right);
-        if(day !== lastDay){
+      const display = events.map(e => ({...e, complete:true}));
+      if (currentEvent.left || currentEvent.right) {
+        display.push({...currentEvent, complete:false});
+      }
+      display.slice().reverse().forEach(e => {
+        const ts  = e.left || e.right,
+              day = fmtDate(ts);
+        if (day !== lastDay) {
           lastDay = day;
-          const h = document.createElement('div');
-          h.textContent = day;
-          h.className = 'day';
-          logEl.appendChild(h);
+          const hdr = document.createElement('div');
+          hdr.className = 'day';
+          hdr.textContent = day;
+          logEl.appendChild(hdr);
         }
-        const card = document.createElement('div'),
-              complete = e.left && e.right;
+        const card     = document.createElement('div'),
+              complete = e.complete;
         card.className = 'card' + (complete ? '' : ' incomplete');
 
-        const leftHtml = e.left ? fmtTime(e.left) : '–';
-        let rightHtml = '–';
-        if(complete){
-          const mins = Math.round((e.right - e.left) / 60000);
-          rightHtml = `Complete ✅ (${mins} min)`;
-        } else if(e.right){
-          rightHtml = fmtTime(e.right);
-        }
+        const leftHtml  = e.left ? fmtTime(e.left) : '–',
+              rightHtml = complete
+                ? \`Complete ✅ (\${ Math.round((e.right - e.left)/60000) } min)\`
+                : (e.right ? fmtTime(e.right) : '–');
 
-        card.innerHTML = `<div>${leftHtml}</div><div>${rightHtml}</div>`;
+        card.innerHTML = \`<div>\${leftHtml}</div><div>\${rightHtml}</div>\`;
         logEl.appendChild(card);
       });
 
-      const last = events[events.length-1];
-      if(last && last.left && last.right){
-        const t = Math.max(last.left, last.right) + INTERVAL;
+      btnComp.style.display = (currentEvent.left && currentEvent.right) ? 'block' : 'none';
+
+      if (events.length) {
+        const last = events[events.length-1],
+              due  = Math.max(last.left, last.right) + INTERVAL;
         nextEl.textContent = 'Next feed at ' +
-          new Date(t).toLocaleTimeString(undefined, {
-            hour:'2-digit', minute:'2-digit'
-          });
-      } else if(last){
-        nextEl.textContent = last.left
-          ? 'Finish right side'
-          : 'Finish left side';
+          new Date(due).toLocaleTimeString(undefined, {hour:'2-digit',minute:'2-digit'});
       } else {
         nextEl.textContent = '';
       }
     }
 
-    document.querySelectorAll('button')
-      .forEach(b => b.addEventListener('click', () => logSide(b.dataset.side)));
+    document.querySelector('button[data-side="left"]')
+      .addEventListener('click', () => logSide('left'));
+    document.querySelector('button[data-side="right"]')
+      .addEventListener('click', () => logSide('right'));
+    document.getElementById('completeBtn')
+      .addEventListener('click', completeEvent);
 
     render();
   </script>
